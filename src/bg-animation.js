@@ -19,12 +19,9 @@ function sortArray(array, method) {
 }
 
 function enableBgPassthrough() {
-  const events = [
-    "pointerdown", "pointerup", "pointermove",
-    "click", "dblclick", "contextmenu"
-  ];
+  const events = ["pointerdown", "pointerup", "pointermove", "click", "dblclick", "contextmenu"];
 
-  function forwardToIframe(e) {
+  function forwardToBackground(e) {
     const activeFrame = Array.from(lovelaceUI?.frameContainers || [])
       .find(frame => frame.getAttribute('data-frame-active') === 'true');
 
@@ -33,38 +30,35 @@ function enableBgPassthrough() {
 
     const rect = iframe.getBoundingClientRect();
 
-    // Create relative coordinates inside the iframe
-    const relativeX = e.clientX - rect.left;
-    const relativeY = e.clientY - rect.top;
-
-    const forwardedEvent = new e.constructor(e.type, {
-      bubbles: true,
-      cancelable: true,
-      clientX: relativeX,
-      clientY: relativeY,
+    const data = {
+      type: 'bg-passthrough-event',
+      eventType: e.type,
+      clientX: e.clientX,
+      clientY: e.clientY,
       screenX: e.screenX,
       screenY: e.screenY,
       button: e.button,
       buttons: e.buttons,
-      pointerId: e.pointerId,
-      pointerType: e.pointerType,
-      pressure: e.pressure,
       altKey: e.altKey,
       ctrlKey: e.ctrlKey,
       shiftKey: e.shiftKey,
       metaKey: e.metaKey,
-      view: iframe.contentWindow
-    });
+      deltaX: e.deltaX || 0,
+      deltaY: e.deltaY || 0,
+      deltaZ: e.deltaZ || 0,
+      deltaMode: e.deltaMode || 0,
+      rect: { left: rect.left, top: rect.top }
+    };
 
-    iframe.contentWindow.document.dispatchEvent(forwardedEvent);
+    iframe.contentWindow.postMessage(data, '*');
   }
 
   // Forward pointer events
   events.forEach(type => {
-    document.addEventListener(type, forwardToIframe, { capture: true });
+    document.addEventListener(type, forwardToBackground, { capture: true });
   });
 
-  // Wheel must be handled separately
+  // Wheel separately
   document.addEventListener("wheel", (e) => {
     const activeFrame = Array.from(lovelaceUI?.frameContainers || [])
       .find(frame => frame.getAttribute('data-frame-active') === 'true');
@@ -72,18 +66,19 @@ function enableBgPassthrough() {
     const iframe = activeFrame ? activeFrame.querySelector('iframe') : null;
     if (!iframe || !iframe.contentWindow) return;
 
-    const wheelEvt = new WheelEvent("wheel", {
-      bubbles: true,
-      cancelable: true,
+    const data = {
+      type: 'bg-passthrough-event',
+      eventType: 'wheel',
+      clientX: e.clientX,
+      clientY: e.clientY,
       deltaX: e.deltaX,
       deltaY: e.deltaY,
       deltaZ: e.deltaZ,
       deltaMode: e.deltaMode,
-      clientX: e.clientX,
-      clientY: e.clientY
-    });
+      rect: { left: iframe.getBoundingClientRect().left, top: iframe.getBoundingClientRect().top }
+    };
 
-    iframe.contentWindow.document.dispatchEvent(wheelEvt);
+    iframe.contentWindow.postMessage(data, '*');
   }, { capture: true });
 }
 
