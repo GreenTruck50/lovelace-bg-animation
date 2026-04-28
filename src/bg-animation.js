@@ -18,6 +18,71 @@ function sortArray(array, method) {
   return methods[method]?.() || console.error('Invalid sorting method') || array;
 }
 
+function enableBgPassthrough() {
+  const iframeEvents = [
+    "pointerdown", "pointerup", "pointermove",
+    "pointerenter", "pointerleave", "pointercancel",
+    "click", "dblclick", "contextmenu"
+  ];
+
+  function forwardPointerEvent(e) {
+    const activeFrame = Array.from(lovelaceUI?.frameContainers || [])
+      .find(frame => frame.getAttribute('data-frame-active') === 'true');
+
+    const iframe = activeFrame ? activeFrame.querySelector('iframe') : null;
+    if (!iframe || !iframe.contentWindow) return;
+
+    const rect = iframe.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const evt = new e.constructor(e.type, {
+      bubbles: true,
+      cancelable: true,
+      clientX: x,
+      clientY: y,
+      button: e.button,
+      buttons: e.buttons,
+      pointerId: e.pointerId,
+      pointerType: e.pointerType,
+      pressure: e.pressure,
+      altKey: e.altKey,
+      ctrlKey: e.ctrlKey,
+      shiftKey: e.shiftKey,
+      metaKey: e.metaKey
+    });
+
+    iframe.contentWindow.document.dispatchEvent(evt);
+  }
+  
+  iframeEvents.forEach(type => {
+    document.addEventListener(type, (e) => {
+      forwardPointerEvent(e);
+    }, { capture: true });
+  });
+  
+  document.addEventListener("wheel", (e) => {
+    const activeFrame = Array.from(lovelaceUI?.frameContainers || [])
+      .find(frame => frame.getAttribute('data-frame-active') === 'true');
+
+    const iframe = activeFrame ? activeFrame.querySelector('iframe') : null;
+    if (!iframe || !iframe.contentWindow) return;
+
+    const evt = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaX: e.deltaX,
+      deltaY: e.deltaY,
+      deltaZ: e.deltaZ,
+      deltaMode: e.deltaMode,
+      clientX: e.clientX,
+      clientY: e.clientY
+    });
+
+    iframe.contentWindow.document.dispatchEvent(evt);
+  }, { capture: true });
+}
+
 async function setPlaylistIndexes() {
   playlistIndexes = { "global": { "current": 0, "next": 0, "timeout": false }, "view": { "current": 0, "next": 0, "timeout": false } }
 }
@@ -337,6 +402,7 @@ function initializeBackgroundElements() {
   if (rootPluginConfig.overlay?.show) {
     lovelaceUI.bgRootElement.insertAdjacentHTML('beforeend', `<div id="bg-overlay" ${rootPluginConfig.overlay.style ? `style="${rootPluginConfig.overlay.style}"` : ''}></div>`);
   }
+  enableBgPassthrough();
 }
 function toggleLovelaceStyle(state) {
   lovelaceUI.rootStyleElement = lovelaceUI.huiRootElement.shadowRoot.querySelector("#bg-animation-styles-root");
