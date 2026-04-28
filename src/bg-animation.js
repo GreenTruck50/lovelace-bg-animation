@@ -19,13 +19,12 @@ function sortArray(array, method) {
 }
 
 function enableBgPassthrough() {
-  const iframeEvents = [
+  const events = [
     "pointerdown", "pointerup", "pointermove",
-    "pointerenter", "pointerleave", "pointercancel",
     "click", "dblclick", "contextmenu"
   ];
 
-  function forwardPointerEvent(e) {
+  function forwardToIframe(e) {
     const activeFrame = Array.from(lovelaceUI?.frameContainers || [])
       .find(frame => frame.getAttribute('data-frame-active') === 'true');
 
@@ -33,14 +32,18 @@ function enableBgPassthrough() {
     if (!iframe || !iframe.contentWindow) return;
 
     const rect = iframe.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
 
-    const evt = new e.constructor(e.type, {
+    // Create relative coordinates inside the iframe
+    const relativeX = e.clientX - rect.left;
+    const relativeY = e.clientY - rect.top;
+
+    const forwardedEvent = new e.constructor(e.type, {
       bubbles: true,
       cancelable: true,
-      clientX: x,
-      clientY: y,
+      clientX: relativeX,
+      clientY: relativeY,
+      screenX: e.screenX,
+      screenY: e.screenY,
       button: e.button,
       buttons: e.buttons,
       pointerId: e.pointerId,
@@ -49,18 +52,19 @@ function enableBgPassthrough() {
       altKey: e.altKey,
       ctrlKey: e.ctrlKey,
       shiftKey: e.shiftKey,
-      metaKey: e.metaKey
+      metaKey: e.metaKey,
+      view: iframe.contentWindow
     });
 
-    iframe.contentWindow.document.dispatchEvent(evt);
+    iframe.contentWindow.document.dispatchEvent(forwardedEvent);
   }
-  
-  iframeEvents.forEach(type => {
-    document.addEventListener(type, (e) => {
-      forwardPointerEvent(e);
-    }, { capture: true });
+
+  // Forward pointer events
+  events.forEach(type => {
+    document.addEventListener(type, forwardToIframe, { capture: true });
   });
-  
+
+  // Wheel must be handled separately
   document.addEventListener("wheel", (e) => {
     const activeFrame = Array.from(lovelaceUI?.frameContainers || [])
       .find(frame => frame.getAttribute('data-frame-active') === 'true');
@@ -68,7 +72,7 @@ function enableBgPassthrough() {
     const iframe = activeFrame ? activeFrame.querySelector('iframe') : null;
     if (!iframe || !iframe.contentWindow) return;
 
-    const evt = new WheelEvent("wheel", {
+    const wheelEvt = new WheelEvent("wheel", {
       bubbles: true,
       cancelable: true,
       deltaX: e.deltaX,
@@ -79,7 +83,7 @@ function enableBgPassthrough() {
       clientY: e.clientY
     });
 
-    iframe.contentWindow.document.dispatchEvent(evt);
+    iframe.contentWindow.document.dispatchEvent(wheelEvt);
   }, { capture: true });
 }
 
